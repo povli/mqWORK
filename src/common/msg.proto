@@ -1,0 +1,29 @@
+syntax = "proto3";
+package hz_mq;
+
+// Define delivery mode constants for message persistence
+enum DeliveryMode {
+    UNDURABLE = 0;
+    DURABLE = 1;
+}
+
+// Basic message properties attached to each message
+message BasicProperties {
+    string id = 1;
+    DeliveryMode delivery_mode = 2;
+    string routing_key = 3;
+}
+
+// Payload of a message, including properties and body
+message MessagePayload {
+    BasicProperties properties = 1;
+    string body = 2;
+    string valid = 3;
+}
+
+// Message stored in queues (with persistent info offset/length)
+message Message {
+    MessagePayload payload = 1;
+    uint64 offset = 2;
+    uint64 length = 3;
+}

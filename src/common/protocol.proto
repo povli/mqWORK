@@ -1,0 +1,159 @@
+syntax = "proto3";
+package hz_mq;
+
+import "msg.proto";
+
+// Exchange types (for routing)
+enum ExchangeType {
+    DIRECT = 0;
+    FANOUT = 1;
+    TOPIC = 2;
+}
+
+// *** Request Messages ***
+
+message openChannelRequest {
+    string rid = 1;  // request ID
+    string cid = 2;  // channel ID
+}
+
+message closeChannelRequest {
+    string rid = 1;
+    string cid = 2;
+}
+
+message declareExchangeRequest {
+    string rid = 1;
+    string cid = 2;
+    string exchange_name = 3;
+    ExchangeType exchange_type = 4;
+    bool durable = 5;
+    bool auto_delete = 6;
+    map<string, string> args = 7;
+}
+
+message deleteExchangeRequest {
+    string rid = 1;
+    string cid = 2;
+    string exchange_name = 3;
+}
+
+message declareQueueRequest {
+    string rid = 1;
+    string cid = 2;
+    string queue_name = 3;
+    bool exclusive = 4;
+    bool durable = 5;
+    bool auto_delete = 6;
+    map<string, string> args = 7;
+}
+
+message deleteQueueRequest {
+    string rid = 1;
+    string cid = 2;
+    string queue_name = 3;
+}
+
+message bindRequest {
+    string rid = 1;
+    string cid = 2;
+    string exchange_name = 3;
+    string queue_name = 4;
+    string binding_key = 5;
+}
+
+message unbindRequest {
+    string rid = 1;
+    string cid = 2;
+    string exchange_name = 3;
+    string queue_name = 4;
+}
+
+message basicPublishRequest {
+    string rid = 1;
+    string cid = 2;
+    string exchange_name = 3;
+    string body = 4;
+    BasicProperties properties = 5;
+}
+
+message basicAckRequest {
+    string rid = 1;
+    string cid = 2;
+    string queue_name = 3;
+    string message_id = 4;
+}
+
+message basicConsumeRequest {
+    string rid = 1;
+    string cid = 2;
+    string consumer_tag = 3;
+    string queue_name = 4;
+    bool auto_ack = 5;
+}
+
+message basicCancelRequest {
+    string rid = 1;
+    string cid = 2;
+    string consumer_tag = 3;
+    string queue_name = 4;
+}
+
+message basicQueryRequest {
+    string rid = 1;
+    string cid = 2;
+}
+
+// *** Response Messages ***
+
+message basicCommonResponse {
+    string rid = 1;
+    string cid = 2;
+    bool ok = 3;
+}
+
+message basicConsumeResponse {
+    string cid = 1;           // channel ID
+    string consumer_tag = 2;
+    string body = 3;
+    BasicProperties properties = 4;
+}
+
+message basicQueryResponse {
+    string rid = 1;
+    string cid = 2;
+    string body = 3;
+}
+
+message heartbeatRequest {
+    string rid = 1;
+}
+
+message heartbeatResponse {
+    string rid = 1;
+}
+
+
+message heartbeatRequest {
+    string rid = 1;
+}
+
+message heartbeatResponse {
+    string rid = 1;
+}
+
+message queueStatusRequest {
+    string rid = 1;
+    string cid = 2;
+    string queue_name = 3;
+}
+
+message queueStatusResponse {
+    string rid = 1;
+    string cid = 2;
+    bool exists = 3;
+    bool durable = 4;
+    bool exclusive = 5;
+    bool auto_delete = 6;
+    map<string, string> args = 7;
+}
