@@ -133,15 +133,6 @@ message heartbeatResponse {
     string rid = 1;
 }
 
-
-message heartbeatRequest {
-    string rid = 1;
-}
-
-message heartbeatResponse {
-    string rid = 1;
-}
-
 message queueStatusRequest {
     string rid = 1;
     string cid = 2;
