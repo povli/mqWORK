@@ -98,6 +98,8 @@ private:
     void on_declareQueueWithDLQ(const muduo::net::TcpConnectionPtr&, const declareQueueWithDLQRequestPtr&, muduo::Timestamp);
     void on_basicNack     (const muduo::net::TcpConnectionPtr&, const basicNackRequestPtr&,      muduo::Timestamp);
     void on_queueStatusRequest(const muduo::net::TcpConnectionPtr&, const queueStatusRequestPtr&, muduo::Timestamp);
+
+    virtual_host::ptr get_virtual_host() const { return __virtual_host; }
 private:
     std::unique_ptr<muduo::net::EventLoop>   __loop;
     std::unique_ptr<muduo::net::TcpServer>   __server;

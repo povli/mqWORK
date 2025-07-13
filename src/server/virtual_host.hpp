@@ -77,9 +77,14 @@ public:
                              const std::string& body);
     message_ptr basic_consume_and_remove(const std::string& queue_name);
     void basic_ack(const std::string& queue_name, const std::string& msg_id);
-    void basic_nack(const std::string& queue_name, const std::string& msg_id, 
+    void basic_nack(const std::string& queue_name, const std::string& msg_id,
                     bool requeue, const std::string& reason);
     std::string basic_query();  // 简化的 pull 查询
+
+    queue_message::stats queue_runtime_stats(const std::string& queue_name);
+    void compact_queue(const std::string& queue_name);
+
+    queue_message_ptr select_queue_message(const std::string& queue_name);
 
 private:
     std::string                                   __name;

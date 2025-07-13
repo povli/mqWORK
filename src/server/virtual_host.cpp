@@ -408,4 +408,26 @@ std::string virtual_host::basic_query()
     return {};
 }
 
+queue_message_ptr virtual_host::select_queue_message(const std::string& queue_name)
+{
+    auto it = __queue_messages.find(queue_name);
+    if (it == __queue_messages.end()) return nullptr;
+    return it->second;
+}
+
+queue_message::stats virtual_host::queue_runtime_stats(const std::string& queue_name)
+{
+    auto it = __queue_messages.find(queue_name);
+    if (it == __queue_messages.end()) return {};
+    return it->second->get_stats();
+}
+
+void virtual_host::compact_queue(const std::string& queue_name)
+{
+    auto it = __queue_messages.find(queue_name);
+    if (it != __queue_messages.end()) {
+        it->second->compact();
+    }
+}
+
 } 
