@@ -28,6 +28,12 @@ class queue_message {
 public:
     using ptr = std::shared_ptr<queue_message>;
 
+    struct stats {
+        size_t depth{0};
+        size_t file_size{0};
+        double invalid_ratio{0.0};
+    };
+
     queue_message(const std::string& base_dir, const std::string& queue_name);
     ~queue_message();
 
@@ -43,6 +49,9 @@ public:
     std::size_t getable_count() const { return msgs_.size(); }
     std::deque<message_ptr> get_all_messages() const { return msgs_; }
     void recovery();   // 从磁盘恢复
+
+    stats get_stats() const;
+    void compact();
 
 
 private:
@@ -180,4 +189,68 @@ inline void hz_mq::queue_message::recovery()
 
         pos = file_.tellg();
     }
-}   
+}
+
+inline hz_mq::queue_message::stats hz_mq::queue_message::get_stats() const
+{
+    stats s{};
+    s.depth = msgs_.size();
+
+    namespace fs = std::filesystem;
+    if (fs::exists(file_path_)) {
+        s.file_size = fs::file_size(file_path_);
+    }
+
+    std::lock_guard<std::mutex> lk(mtx_);
+    if (!file_.is_open()) return s;
+
+    file_.clear();
+    file_.seekg(0, std::ios::beg);
+    size_t total = 0;
+    size_t invalid = 0;
+    while (true) {
+        uint32_t len = 0;
+        if (!file_.read(reinterpret_cast<char*>(&len), sizeof(len))) break;
+        std::string data(len, '\0');
+        if (!file_.read(&data[0], len)) break;
+        MessagePayload payload;
+        if (!payload.ParseFromString(data)) break;
+        ++total;
+        if (payload.valid() != "1") ++invalid;
+    }
+    if (total > 0) {
+        s.invalid_ratio = static_cast<double>(invalid) / static_cast<double>(total);
+    }
+    file_.clear();
+    file_.seekg(0, std::ios::end);
+    return s;
+}
+
+inline void hz_mq::queue_message::compact()
+{
+    std::lock_guard<std::mutex> lk(mtx_);
+    if (!file_.is_open()) return;
+
+    namespace fs = std::filesystem;
+    std::string tmp_path = file_path_ + ".tmp";
+    std::fstream tmp(tmp_path, std::ios::out | std::ios::binary);
+    if (!tmp.is_open()) return;
+
+    std::streampos pos = 0;
+    for (auto& msg : msgs_) {
+        MessagePayload payload = msg->payload();
+        std::string data;
+        payload.SerializeToString(&data);
+        uint32_t len = static_cast<uint32_t>(data.size());
+        tmp.write(reinterpret_cast<const char*>(&len), sizeof(len));
+        tmp.write(data.data(), data.size());
+        tmp.flush();
+        msg->set_offset(static_cast<uint64_t>(pos));
+        msg->set_length(sizeof(len) + len);
+        pos = tmp.tellp();
+    }
+    tmp.close();
+    file_.close();
+    fs::rename(tmp_path, file_path_);
+    file_.open(file_path_, std::ios::in | std::ios::out | std::ios::binary);
+}
