@@ -12,6 +12,22 @@ message BasicProperties {
     string id = 1;
     DeliveryMode delivery_mode = 2;
     string routing_key = 3;
+    // 新增字段用于消息过滤
+    map<string, string> headers = 4;
+    int32 priority = 5;
+    int64 timestamp = 6;
+    string content_type = 7;
+    string content_encoding = 8;
+    string correlation_id = 9;
+    string reply_to = 10;
+    int64 expiration = 11;
+    string message_id = 12;
+    int32 delivery_tag = 13;
+    bool redelivered = 14;
+    string exchange = 15;
+    string user_id = 16;
+    string app_id = 17;
+    string cluster_id = 18;
 }
 
 // Payload of a message, including properties and body

@@ -52,6 +52,8 @@ using heartbeatRequestPtr      = std::shared_ptr<heartbeatRequest>;
 using MessagePtr               = std::shared_ptr<::google::protobuf::Message>;
 using queueStatusRequestPtr    = std::shared_ptr<queueStatusRequest>;
 using queueStatusResponsePtr   = std::shared_ptr<queueStatusResponse>;
+using declareQueueWithDLQRequestPtr = std::shared_ptr<declareQueueWithDLQRequest>;
+using basicNackRequestPtr = std::shared_ptr<basicNackRequest>;
 
 // 常量 -------------------------------------------------------------
 inline constexpr const char* DBFILE_PATH = "/meta.db";
@@ -93,6 +95,8 @@ private:
     void on_basicCancel   (const muduo::net::TcpConnectionPtr&, const basicCancelRequestPtr&,    muduo::Timestamp);
     void on_basicQuery    (const muduo::net::TcpConnectionPtr&, const basicQueryRequestPtr&,     muduo::Timestamp);
     void on_heartbeat     (const muduo::net::TcpConnectionPtr&, const heartbeatRequestPtr&,      muduo::Timestamp);
+    void on_declareQueueWithDLQ(const muduo::net::TcpConnectionPtr&, const declareQueueWithDLQRequestPtr&, muduo::Timestamp);
+    void on_basicNack     (const muduo::net::TcpConnectionPtr&, const basicNackRequestPtr&,      muduo::Timestamp);
     void on_queueStatusRequest(const muduo::net::TcpConnectionPtr&, const queueStatusRequestPtr&, muduo::Timestamp);
 private:
     std::unique_ptr<muduo::net::EventLoop>   __loop;

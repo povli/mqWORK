@@ -135,4 +135,26 @@ msg_queue_manager::queue_status msg_queue_manager::get_queue_status(const std::s
     return status;
 }
 
+bool msg_queue_manager::declare_queue_with_dlq(const std::string& qname, bool qdurable,
+                                               bool qexclusive, bool qauto_delete,
+                                               const std::unordered_map<std::string, std::string>& qargs,
+                                               const dead_letter_config& dlq_config)
+{
+    std::unique_lock<std::mutex> lock(__mtx);
+
+    if (__msg_queues.find(qname) != __msg_queues.end()) return true; // 已存在
+
+    auto qptr = std::make_shared<msg_queue>(qname, qdurable, qexclusive,
+                                            qauto_delete, qargs);
+    
+    // 设置死信队列配置
+    qptr->set_dead_letter_config(dlq_config);
+
+    if (qdurable && !__mapper.insert(qptr)) return false;
+
+    __msg_queues[qname] = std::move(qptr);
+    return true;
+}
 } 
+
+// 新增：支持死信队列配置的队列声明

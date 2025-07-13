@@ -119,6 +119,28 @@ void channel::declare_queue(const declareQueueRequestPtr& req)
     basic_response(true, req->rid(), req->cid());
 }
 
+void channel::declare_queue_with_dlq(const declareQueueWithDLQRequestPtr& req)
+{
+    auto args_map = std::unordered_map<std::string, std::string>(req->args().begin(), req->args().end());
+    
+    // 构建死信队列配置
+    dead_letter_config dlq_config;
+    if (req->has_dlq_config()) {
+        dlq_config.exchange_name = req->dlq_config().exchange_name();
+        dlq_config.routing_key = req->dlq_config().routing_key();
+        dlq_config.max_retries = req->dlq_config().max_retries();
+    }
+    
+    bool ok = __host->declare_queue_with_dlq(req->queue_name(), req->durable(), req->exclusive(),
+                                             req->auto_delete(), args_map, dlq_config);
+    if (!ok) {
+        basic_response(false, req->rid(), req->cid());
+        return;
+    }
+    __cmp->init_queue_consumer(req->queue_name());
+    basic_response(true, req->rid(), req->cid());
+}
+
 void channel::delete_queue(const deleteQueueRequestPtr& req)
 {
     __cmp->destroy_queue_consumer(req->queue_name());
@@ -146,44 +168,49 @@ void channel::unbind(const unbindRequestPtr& req)
 // -----------------------------------------------------------------------------
 void channel::basic_publish(const basicPublishRequestPtr& req)
 {
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
     // 1. exchange 必须存在
->>>>>>> ae5edbe (完成功能1：点对点消息发送源码，测试代码，测试进行，功能描述文档，测试用例文档，测试报告文档)
-=======
->>>>>>> 3e459da (删除muduo库，添加开发环境搭建文档，添加client.cpp，添加makefile，修改功能1设计文档和测试报告)
     auto ep = __host->select_exchange(req->exchange_name());
     if (!ep) {
         basic_response(false, req->rid(), req->cid());
         return;
     }
 
-    // 2. 路由匹配
-    msg_queue_binding_map bindings = __host->exchange_bindings(req->exchange_name());
-
+    // 2. 使用publish_to_exchange方法，支持所有交换机类型
     BasicProperties* properties = nullptr;
-    std::string routing_key;
     if (req->has_properties()) {
         properties = req->mutable_properties();
-        routing_key = properties->routing_key();
     }
 
-    for (const auto& [qname, bind_ptr] : bindings) {
-        if (router::match_route(ep->type, routing_key, bind_ptr->binding_key)) {
-            // 3. 入队
-            __host->basic_publish(qname, properties, req->body());
-            // 4. 异步派发
+    bool published = __host->publish_to_exchange(req->exchange_name(), properties, req->body());
+    
+    // 3. 如果有消息投递成功，异步派发消费任务
+    if (published) {
+        auto bindings = __host->exchange_bindings(req->exchange_name());
+        for (const auto& [qname, _] : bindings) {
             auto task = std::bind(&channel::consume, this, qname);
             __pool->push(task);
         }
     }
+    
     basic_response(true, req->rid(), req->cid());
 }
 
 void channel::basic_ack(const basicAckRequestPtr& req)
 {
     __host->basic_ack(req->queue_name(), req->message_id());
+    basic_response(true, req->rid(), req->cid());
+}
+
+// 新增：消息拒绝（NACK）处理
+void channel::basic_nack(const basicNackRequestPtr& req)
+{
+    __host->basic_nack(req->queue_name(), req->message_id(), req->requeue(), req->reason());
+    basic_response(true, req->rid(), req->cid());
+}
+
+void channel::basic_nack(const basicNackRequestPtr& req)
+{
+    __host->basic_nack(req->queue_name(), req->message_id(), req->requeue(), req->reason());
     basic_response(true, req->rid(), req->cid());
 }
 

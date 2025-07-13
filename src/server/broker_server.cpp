@@ -70,6 +70,8 @@ BrokerServer::BrokerServer(int port, const std::string& base_dir)
     REG(basicQueryRequest,       &BrokerServer::on_basicQuery);
     REG(heartbeatRequest,        &BrokerServer::on_heartbeat);
     REG(queueStatusRequest,     &BrokerServer::on_queueStatusRequest);
+    REG(declareQueueWithDLQRequest, &BrokerServer::on_declareQueueWithDLQ);
+    REG(basicNackRequest,        &BrokerServer::on_basicNack);
 #undef REG
 
     // 5. 网络层回调 ------------------------------------------------------------
@@ -289,6 +291,24 @@ void BrokerServer::on_heartbeat(const muduo::net::TcpConnectionPtr& conn, const 
     heartbeatResponse resp;
     resp.set_rid(msg->rid());
     __codec->send(conn, resp);
+}
+
+void BrokerServer::on_declareQueueWithDLQ(const muduo::net::TcpConnectionPtr& conn, const declareQueueWithDLQRequestPtr& msg, muduo::Timestamp ts)
+{
+    (void)ts;
+    GET_CONN_CTX();
+    GET_CHANNEL(msg->cid());
+    LOG_REQ(declareQueueWithDLQRequest);
+    ch->declare_queue_with_dlq(msg);
+}
+
+void BrokerServer::on_basicNack(const muduo::net::TcpConnectionPtr& conn, const basicNackRequestPtr& msg, muduo::Timestamp ts)
+{
+    (void)ts;
+    GET_CONN_CTX();
+    GET_CHANNEL(msg->cid());
+    LOG_REQ(basicNackRequest);
+    ch->basic_nack(msg);
 }
 
 void BrokerServer::on_queueStatusRequest(const muduo::net::TcpConnectionPtr& conn, const queueStatusRequestPtr& msg, muduo::Timestamp ts)

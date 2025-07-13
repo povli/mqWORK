@@ -55,7 +55,15 @@ inline bool match_route(ExchangeType type,
                 ki = kdot == std::string::npos ? key.size() : kdot + 1;
                 pi = pdot == std::string::npos ? pattern.size() : pdot + 1;
             }
-            return ki >= key.size() && pi >= pattern.size();
+            while (pi < pattern.size()) {
+                size_t pdot = pattern.find('.', pi);
+                std::string ps = pdot == std::string::npos
+                                   ? pattern.substr(pi)
+                                   : pattern.substr(pi, pdot - pi);
+                if (ps != "#") return false;
+                pi = pdot == std::string::npos ? pattern.size() : pdot + 1;
+            }
+            return ki >= key.size();
         };
         return matchSegments(routing_key, binding_key);
     }

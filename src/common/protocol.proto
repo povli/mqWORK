@@ -8,6 +8,7 @@ enum ExchangeType {
     DIRECT = 0;
     FANOUT = 1;
     TOPIC = 2;
+    HEADERS = 3;
 }
 
 // *** Request Messages ***
@@ -67,6 +68,8 @@ message unbindRequest {
     string cid = 2;
     string exchange_name = 3;
     string queue_name = 4;
+    string binding_key = 5;
+    map<string, string> binding_args = 6;  // 绑定参数，用于Headers Exchange过滤
 }
 
 message basicPublishRequest {
@@ -125,14 +128,6 @@ message basicQueryResponse {
     string body = 3;
 }
 
-message heartbeatRequest {
-    string rid = 1;
-}
-
-message heartbeatResponse {
-    string rid = 1;
-}
-
 
 message heartbeatRequest {
     string rid = 1;
@@ -156,4 +151,43 @@ message queueStatusResponse {
     bool exclusive = 5;
     bool auto_delete = 6;
     map<string, string> args = 7;
+}
+// *** 死信队列相关消息 ***
+
+// 死信队列配置
+message deadLetterConfig {
+    string exchange_name = 1;  // 死信交换机名称
+    string routing_key = 2;    // 死信路由键
+    uint32 max_retries = 3;    // 最大重试次数
+}
+
+// 扩展队列声明请求，支持死信队列配置
+message declareQueueWithDLQRequest {
+    string rid = 1;
+    string cid = 2;
+    string queue_name = 3;
+    bool exclusive = 4;
+    bool durable = 5;
+    bool auto_delete = 6;
+    map<string, string> args = 7;
+    deadLetterConfig dlq_config = 8;  // 死信队列配置
+}
+
+// 消息拒绝请求（NACK）
+message basicNackRequest {
+    string rid = 1;
+    string cid = 2;
+    string queue_name = 3;
+    string message_id = 4;
+    bool requeue = 5;  // 是否重新入队（false表示投递到死信队列）
+    string reason = 6; // 拒绝原因
+}
+
+// 死信消息结构
+message deadLetterMessage {
+    Message original_message = 1;
+    string original_queue = 2;
+    string reject_reason = 3;
+    uint64 reject_timestamp = 4;
+    uint32 retry_count = 5;
 }

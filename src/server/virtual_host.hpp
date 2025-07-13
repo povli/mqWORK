@@ -40,7 +40,10 @@ public:
     bool declare_queue(const std::string& queue_name, bool durable, bool exclusive,
                        bool auto_delete,
                        const std::unordered_map<std::string, std::string>& args);
-
+    bool declare_queue_with_dlq(const std::string& queue_name, bool durable, bool exclusive,
+                        bool auto_delete,
+                        const std::unordered_map<std::string, std::string>& args,
+                        const dead_letter_config& dlq_config);
     void delete_queue(const std::string& queue_name);
     bool exists_queue(const std::string& queue_name);
     queue_map all_queues();
@@ -48,7 +51,11 @@ public:
     // ------------------- Binding --------------------
     bool bind(const std::string& exchange_name, const std::string& queue_name,
               const std::string& binding_key);
-
+    
+    bool bind(const std::string& exchange_name, const std::string& queue_name,
+              const std::string& binding_key,
+              const std::unordered_map<std::string, std::string>& binding_args);
+              
     void unbind(const std::string& exchange_name, const std::string& queue_name);
 
     msg_queue_binding_map exchange_bindings(const std::string& exchange_name);
@@ -66,8 +73,12 @@ public:
          BasicProperties*   bp,
         const std::string& body);
     message_ptr basic_consume(const std::string& queue_name);
+    bool publish_to_exchange(const std::string& exchange_name, BasicProperties* bp,
+                             const std::string& body);
+    message_ptr basic_consume_and_remove(const std::string& queue_name);
     void basic_ack(const std::string& queue_name, const std::string& msg_id);
-
+    void basic_nack(const std::string& queue_name, const std::string& msg_id, 
+                    bool requeue, const std::string& reason);
     std::string basic_query();  // 简化的 pull 查询
 
 private:

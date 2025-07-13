@@ -44,6 +44,8 @@ using basicConsumeRequestPtr   = std::shared_ptr<basicConsumeRequest>;
 using basicCancelRequestPtr    = std::shared_ptr<basicCancelRequest>;
 using basicQueryRequestPtr     = std::shared_ptr<basicQueryRequest>;
 using basicCommonResponsePtr   = std::shared_ptr<basicCommonResponse>;
+using declareQueueWithDLQRequestPtr = std::shared_ptr<declareQueueWithDLQRequest>;
+using basicNackRequestPtr = std::shared_ptr<basicNackRequest>;
 
 // =================================================================
 // channel : 表示一条逻辑通道（AMQP 风格）
@@ -66,6 +68,7 @@ public:
 
     // ------------------- Queue ----------------------
     void declare_queue(const declareQueueRequestPtr& req);
+    void declare_queue_with_dlq(const declareQueueWithDLQRequestPtr& req);
     void delete_queue(const deleteQueueRequestPtr& req);
 
     // ------------------- Binding --------------------
@@ -78,7 +81,7 @@ public:
     void basic_consume(const basicConsumeRequestPtr& req);
     void basic_cancel(const basicCancelRequestPtr& req);
     void basic_query(const basicQueryRequestPtr& req);
-
+    void basic_nack(const basicNackRequestPtr& req);
 private:
     // helpers ------------------------------------------------------
     void basic_response(bool ok, const std::string& rid, const std::string& cid);

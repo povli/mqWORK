@@ -83,6 +83,22 @@ bool virtual_host::declare_queue(const std::string& queue_name, bool durable, bo
     return true;
 }
 
+bool virtual_host::declare_queue_with_dlq(const std::string& queue_name, bool durable, bool exclusive,
+                                          bool auto_delete,
+                                          const std::unordered_map<std::string, std::string>& args,
+                                          const dead_letter_config& dlq_config)
+{
+    if (!__queue_mgr.declare_queue_with_dlq(queue_name, durable, exclusive, auto_delete, args, dlq_config))
+        return false;
+
+    if (!__queue_messages.count(queue_name)) {
+        auto qm = std::make_shared<queue_message>(__base_dir, queue_name);
+        if (durable) qm->recovery();
+        __queue_messages[queue_name] = std::move(qm);
+    }
+    return true;
+}
+
 void virtual_host::delete_queue(const std::string& queue_name)
 {
     __queue_messages.erase(queue_name);
@@ -117,6 +133,18 @@ bool virtual_host::bind(const std::string& exchange_name, const std::string& que
     return true;
 }
 
+bool virtual_host::bind(const std::string& exchange_name, const std::string& queue_name,
+                        const std::string& binding_key,
+                        const std::unordered_map<std::string, std::string>& binding_args)
+{
+    if (!__exchange_mgr.exists(exchange_name) || !__queue_mgr.exists(queue_name))
+        return false;
+
+    auto& binding_map = __exchange_bindings[exchange_name];
+    binding_map[queue_name] = std::make_shared<binding>(exchange_name, queue_name, binding_key, binding_args);
+    return true;
+}
+
 void virtual_host::unbind(const std::string& exchange_name, const std::string& queue_name)
 {
     auto it = __exchange_bindings.find(exchange_name);
@@ -143,7 +171,9 @@ if (it == __queue_messages.end())
 LOG(ERROR) << "publish failed: queue [" << queue_name << "] not exist";
 return false;
 }
-
+if (bp && bp->id().empty()) {
+        bp->set_id(generate_id());
+    }
 // 2) routing_key 规则（直连交换机 "")：
 //    · 为空        ⇒ 视为 queue_name
 //    · 不为空且不等 ⇒ 视为路由不匹配，直接返回 false
@@ -162,6 +192,68 @@ durable = qinfo->durable;
 return it->second->insert(bp, body, durable);
 }
 
+bool virtual_host::publish_to_exchange(const std::string& exchange_name, BasicProperties* bp,
+                                       const std::string& body)
+{
+    // 检查交换机是否存在
+    auto exchange_ptr = select_exchange(exchange_name);
+    if (!exchange_ptr) {
+        LOG(ERROR) << "publish failed: exchange [" << exchange_name << "] not exist";
+        return false;
+    }
+
+    // 获取交换机的绑定
+    auto bindings = exchange_bindings(exchange_name);
+    if (bindings.empty()) {
+        LOG(WARNING) << "publish failed: exchange [" << exchange_name << "] has no bindings";
+        return false;
+    }
+
+    // 获取路由键
+    std::string routing_key;
+    if (bp && !bp->routing_key().empty()) {
+        routing_key = bp->routing_key();
+    }
+
+    // 获取消息头（用于Headers Exchange）
+    std::unordered_map<std::string, std::string> message_headers;
+    if (bp) {
+        for (const auto& [key, value] : bp->headers()) {
+            message_headers[key] = value;
+        }
+    }
+
+    // 遍历所有绑定的队列，根据交换机类型进行匹配
+    bool published = false;
+    for (const auto& [qname, bind_ptr] : bindings) {
+        bool should_publish = false;
+        
+        switch (exchange_ptr->type) {
+        case ExchangeType::DIRECT:
+        case ExchangeType::FANOUT:
+        case ExchangeType::TOPIC:
+            should_publish = router::match_route(exchange_ptr->type, routing_key, bind_ptr->binding_key);
+            break;
+            
+        case ExchangeType::HEADERS:
+            should_publish = router::match_headers(message_headers, bind_ptr->binding_args);
+            break;
+            
+        default:
+            should_publish = false;
+            break;
+        }
+        
+        if (should_publish) {
+            // 投递到匹配的队列
+            if (basic_publish(qname, bp, body)) {
+                published = true;
+            }
+        }
+    }
+
+    return published;
+}
 
 bool virtual_host::publish_ex(const std::string& exchange_name,
     const std::string& routing_key,
@@ -212,6 +304,26 @@ message_ptr virtual_host::basic_consume(const std::string& queue_name)
     return msg;
 }
 
+message_ptr virtual_host::basic_consume_and_remove(const std::string& queue_name)
+{
+    auto it = __queue_messages.find(queue_name);
+    if (it == __queue_messages.end()) {
+        LOG(ERROR) << "consume failed: queue [" << queue_name << "] not exist";
+        return {};
+    }
+    
+    // 获取队首消息
+    auto msg = it->second->front();
+    if (!msg) {
+        return {};
+    }
+    
+    // 移除队首消息
+    it->second->remove(msg->payload().properties().id());
+    
+    return msg;
+}
+
 void virtual_host::basic_ack(const std::string& queue_name, const std::string& msg_id)
 {
     auto it = __queue_messages.find(queue_name);
@@ -219,6 +331,68 @@ void virtual_host::basic_ack(const std::string& queue_name, const std::string& m
         LOG(ERROR) << "ack failed: queue [" << queue_name << "] not exist";
         return;
     }
+    it->second->remove(msg_id);
+}
+
+oid virtual_host::basic_nack(const std::string& queue_name, const std::string& msg_id, 
+                              bool requeue, const std::string& reason)
+{
+    auto it = __queue_messages.find(queue_name);
+    if (it == __queue_messages.end()) return;
+    
+    // 获取队列配置
+    auto queue_ptr = __queue_mgr.select_queue(queue_name);
+    if (!queue_ptr) return;
+    
+    if (requeue) {
+        // 重新入队，不做任何处理
+        return;
+    }
+    
+    // 检查是否有死信队列配置
+    if (!queue_ptr->has_dead_letter_config()) {
+        // 没有死信队列配置，直接删除消息
+        it->second->remove(msg_id);
+        return;
+    }
+    
+    // 获取原始消息
+    auto msg = it->second->front();
+    if (!msg) return;
+    
+    // 查找消息ID匹配的消息
+    auto all_msgs = it->second->get_all_messages();
+    message_ptr target_msg = nullptr;
+    for (const auto& m : all_msgs) {
+        if (m->payload().properties().id() == msg_id) {
+            target_msg = m;
+            break;
+        }
+    }
+    
+    if (!target_msg) {
+        return;
+    }
+    
+    // 创建死信消息
+    auto dead_letter_msg = std::make_shared<Message>();
+    *dead_letter_msg->mutable_payload() = target_msg->payload();
+    
+    // 添加死信队列相关属性
+    auto& dlq_config = queue_ptr->get_dead_letter_config();
+    
+    // 将死信消息投递到死信交换机
+    BasicProperties dlq_props;
+    dlq_props.set_id(generate_id());
+    dlq_props.set_delivery_mode(DeliveryMode::DURABLE);
+    dlq_props.set_routing_key(dlq_config.routing_key);
+    
+    // 投递到死信交换机
+    if (!dlq_config.exchange_name.empty()) {
+        bool dlq_published = publish_to_exchange(dlq_config.exchange_name, &dlq_props, target_msg->payload().body());
+    }
+    
+    // 从原队列中删除消息
     it->second->remove(msg_id);
 }
 

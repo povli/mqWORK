@@ -121,11 +121,11 @@ int main(int argc, char* argv[]) {
     std::cout << "Commands:\n"
               << "open <cid>\n"
               << "close <cid>\n"
-              << "exchange_declare <name> <direct|fanout|topic>\n"
+              << "exchange_declare <name> <direct|fanout|topic|headers>\n"
               << "queue_declare <name>\n"
               << "queue_status <cid> <queue>\n"
-              << "bind <exch> <queue> <binding_key>\n"
-              << "publish <exch> <routing_key> <message>\n"
+              << "bind <exch> <queue> <binding_key> [binding_args]\n"
+              << "publish <exch> <routing_key> <message> [headers]\n"
               << "pull <cid>\n"
               << "consume <cid> <queue> <consumer_tag>\n"
               << "cancel <cid> <consumer_tag> <queue>\n"
@@ -162,6 +162,7 @@ int main(int argc, char* argv[]) {
             ExchangeType exType = ExchangeType::DIRECT;
             if (etype == "fanout") exType = ExchangeType::FANOUT;
             else if (etype == "topic") exType = ExchangeType::TOPIC;
+            else if (etype == "headers") exType = ExchangeType::HEADERS;
             declareExchangeRequest req;
             req.set_rid("cli-exdec-" + ename);
             req.set_cid("0");
@@ -190,6 +191,15 @@ int main(int argc, char* argv[]) {
             req.set_exchange_name(exch);
             req.set_queue_name(qname);
             req.set_binding_key(key);
+            std::string arg;
+            while (iss >> arg) {
+                size_t pos = arg.find('=');
+                if (pos != std::string::npos) {
+                    std::string k = arg.substr(0, pos);
+                    std::string v = arg.substr(pos + 1);
+                    (*req.mutable_binding_args())[k] = v;
+                }
+            }
             g_codec->send(g_conn, req);
         } else if (cmd == "publish") {
             std::string exch, rkey, msg;
@@ -206,6 +216,16 @@ int main(int argc, char* argv[]) {
                 BasicProperties* props = req.mutable_properties();
                 props->set_routing_key(rkey);
                 props->set_delivery_mode(DeliveryMode::UNDURABLE);
+                std::istringstream header_iss(msg);
+                std::string header_arg;
+                while (header_iss >> header_arg) {
+                    size_t pos = header_arg.find('=');
+                    if (pos != std::string::npos) {
+                        std::string k = header_arg.substr(0, pos);
+                        std::string v = header_arg.substr(pos + 1);
+                        (*props->mutable_headers())[k] = v;
+                    }
+                }
             }
             g_codec->send(g_conn, req);
         } else if (cmd == "pull") {

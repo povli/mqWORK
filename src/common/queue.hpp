@@ -8,6 +8,17 @@
 
 namespace hz_mq {
 
+    
+// ---------- 死信队列配置 ----------
+struct dead_letter_config {
+    std::string exchange_name;  // 死信交换机名称
+    std::string routing_key;    // 死信路由键
+    uint32_t max_retries;       // 最大重试次数
+    
+    dead_letter_config() : max_retries(3) {}
+    dead_letter_config(const std::string& ex, const std::string& key, uint32_t retries = 3)
+        : exchange_name(ex), routing_key(key), max_retries(retries) {}
+};
 // ---------- 队列元数据 ----------
 struct msg_queue {
     using ptr = std::shared_ptr<msg_queue>;
@@ -17,11 +28,16 @@ struct msg_queue {
     bool exclusive{false};
     bool auto_delete{false};
     std::unordered_map<std::string, std::string> args;
+    dead_letter_config dlq_config;  // 死信队列配置
 
     msg_queue() = default;
     msg_queue(const std::string& qname, bool qdurable, bool qexclusive,
               bool qauto_delete, const std::unordered_map<std::string, std::string>& qargs);
 
+    // 死信队列相关方法
+    bool has_dead_letter_config() const { return !dlq_config.exchange_name.empty(); }
+    void set_dead_letter_config(const dead_letter_config& config) { dlq_config = config; }
+    const dead_letter_config& get_dead_letter_config() const { return dlq_config; }
     // "k=v&k2=v2" <--> std::unordered_map
     void set_args(const std::string& str_args);
     [[nodiscard]] std::string get_args() const;
@@ -49,7 +65,10 @@ public:
     bool declare_queue(const std::string& qname, bool qdurable, bool qexclusive,
                        bool qauto_delete,
                        const std::unordered_map<std::string, std::string>& qargs);
-
+    bool declare_queue_with_dlq(const std::string& qname, bool qdurable, bool qexclusive,
+                        bool qauto_delete,
+                        const std::unordered_map<std::string, std::string>& qargs,
+                        const dead_letter_config& dlq_config);
     void delete_queue(const std::string& name);
     msg_queue::ptr select_queue(const std::string& name);
     queue_map all();
